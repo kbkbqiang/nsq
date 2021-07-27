@@ -1,4 +1,4 @@
-package io.github.kbkbqiang.middleware.nsq;
+package com.kbkbqiang.middleware.nsq;
 
 import com.github.brainlag.nsq.NSQConfig;
 import com.github.brainlag.nsq.NSQConsumer;

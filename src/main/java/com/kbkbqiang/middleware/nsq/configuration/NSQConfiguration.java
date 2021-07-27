@@ -1,19 +1,19 @@
-package io.github.kbkbqiang.middleware.nsq.configuration;
+package com.kbkbqiang.middleware.nsq.configuration;
 
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.brainlag.nsq.NSQProducer;
+import com.kbkbqiang.middleware.nsq.annotation.NSQCloudMessageListener;
+import com.kbkbqiang.middleware.nsq.annotation.NSQMessageListener;
+import com.kbkbqiang.middleware.nsq.core.DefaultNSQCloudListenerContainer;
+import com.kbkbqiang.middleware.nsq.core.DefaultNSQListenerContainer;
+import com.kbkbqiang.middleware.nsq.core.DefaultNSQListenerContainerConstants;
+import com.kbkbqiang.middleware.nsq.core.NSQCloudListener;
+import com.kbkbqiang.middleware.nsq.core.NSQListener;
+import com.kbkbqiang.middleware.nsq.properties.NSQCloudProperties;
+import com.kbkbqiang.middleware.nsq.properties.NSQProperties;
 import com.sproutsocial.nsq.Client;
 import com.sproutsocial.nsq.Publisher;
-import io.github.kbkbqiang.middleware.nsq.annotation.NSQCloudMessageListener;
-import io.github.kbkbqiang.middleware.nsq.annotation.NSQMessageListener;
-import io.github.kbkbqiang.middleware.nsq.core.DefaultNSQCloudListenerContainer;
-import io.github.kbkbqiang.middleware.nsq.core.DefaultNSQListenerContainer;
-import io.github.kbkbqiang.middleware.nsq.core.DefaultNSQListenerContainerConstants;
-import io.github.kbkbqiang.middleware.nsq.core.NSQCloudListener;
-import io.github.kbkbqiang.middleware.nsq.core.NSQListener;
-import io.github.kbkbqiang.middleware.nsq.properties.NSQCloudProperties;
-import io.github.kbkbqiang.middleware.nsq.properties.NSQProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.aop.support.AopUtils;

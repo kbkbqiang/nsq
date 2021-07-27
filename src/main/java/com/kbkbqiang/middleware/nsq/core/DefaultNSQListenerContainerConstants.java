@@ -1,4 +1,4 @@
-package io.github.kbkbqiang.middleware.nsq.core;
+package com.kbkbqiang.middleware.nsq.core;
 
 /**
  * @author zhaoqiang

@@ -1,16 +1,19 @@
-package io.github.kbkbqiang.middleware.nsq.core;
+package com.kbkbqiang.middleware.nsq.core;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.brainlag.nsq.NSQConsumer;
 import com.github.brainlag.nsq.NSQMessage;
-import com.github.brainlag.nsq.lookup.DefaultNSQLookup;
-import com.github.brainlag.nsq.lookup.NSQLookup;
+import com.sproutsocial.nsq.Client;
+import com.sproutsocial.nsq.DirectSubscriber;
+import com.sproutsocial.nsq.Message;
+import com.sproutsocial.nsq.MessageHandler;
+import com.sproutsocial.nsq.Subscriber;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
 
@@ -28,7 +31,7 @@ import java.util.Objects;
  * @create 2018-08-08 下午4:31
  **/
 @Slf4j
-public class DefaultNSQListenerContainer implements InitializingBean, NSQListenerContainer {
+public class DefaultNSQCloudListenerContainer implements InitializingBean, NSQCloudListenerContainer {
 
     @Setter
     @Getter
@@ -46,6 +49,10 @@ public class DefaultNSQListenerContainer implements InitializingBean, NSQListene
     @Getter
     private String channel;
 
+    @Setter
+    @Getter
+    private String authSecret;
+
     @Getter
     @Setter
     private String charset = "UTF-8";
@@ -59,9 +66,9 @@ public class DefaultNSQListenerContainer implements InitializingBean, NSQListene
     private boolean started;
 
     @Setter
-    private NSQListener nsqListener;
+    private NSQCloudListener nsqCloudListener;
 
-    private NSQConsumer consumer;
+    private Subscriber subscriber;
 
     private Class messageType;
 
@@ -74,15 +81,15 @@ public class DefaultNSQListenerContainer implements InitializingBean, NSQListene
     private int attempts = 5;
 
     @Override
-    public void setupMessageListener(NSQListener nsqListener) {
-        this.nsqListener = nsqListener;
+    public void setupMessageListener(NSQCloudListener nsqCloudListener) {
+        this.nsqCloudListener = nsqCloudListener;
     }
 
     @Override
     public void destroy() {
         this.setStarted(false);
-        if (Objects.nonNull(consumer)) {
-            consumer.shutdown();
+        if (Objects.nonNull(subscriber)) {
+            subscriber.stop();
         }
         log.info("container destroyed, {}", this.toString());
     }
@@ -93,13 +100,11 @@ public class DefaultNSQListenerContainer implements InitializingBean, NSQListene
             throw new IllegalStateException("container already started. " + this.toString());
         }
 
-        initNsqPushConsumer();
+        initNsqCloudPushConsumer();
 
         // parse message type
         this.messageType = getMessageType();
         log.debug("msgType: {}", messageType.getName());
-
-        consumer.start();
         this.setStarted(true);
 
         log.info("started container: {}", this.toString());
@@ -112,16 +117,48 @@ public class DefaultNSQListenerContainer implements InitializingBean, NSQListene
 
     @Override
     public String toString() {
-        return "DefaultNSQListenerContainer{" +
+        return "DefaultNSQCloudListenerContainer{" +
                 ", addrs='" + addrs + '\'' +
                 ", topic='" + topic + '\'' +
                 ", channel='" + channel + '\'' +
                 ", charset='" + charset + '\'' +
                 ", started=" + started +
-                ", nsqListener=" + nsqListener +
+                ", nsqListener=" + nsqCloudListener +
                 ", messageType=" + messageType +
                 ", useTLS=" + useTLS +
+                ", authSecret=" + authSecret +
                 '}';
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object doConvertMessage(Message message) {
+        int currAttempts = message.getAttempts();
+        if (Objects.equals(messageType, Message.class)) {
+            return message;
+        } else {
+            String str = new String(message.getData(), Charset.forName(charset));
+            if (Objects.equals(messageType, String.class)) {
+                return str;
+            } else if (Objects.equals(messageType, List.class)) {
+                return JSONArray.parseArray(str);
+            } else if (Objects.equals(messageType, Byte[].class)) {
+                return message.getData();
+            } else {
+                // if msgType not string, use objectMapper change it.
+                try {
+                    return JSONObject.toJavaObject(JSON.parseObject(str), messageType);
+                } catch (Exception e) {
+                    if (currAttempts > attempts) {
+                        message.finish();
+                        log.error("max {} attempts is error:", attempts, e);
+                    }
+                    log.info("convert failed. str:{}, msgType:{}", str, messageType);
+                    message.requeue();
+                    throw new RuntimeException("cannot convert message to " + messageType, e);
+                }
+            }
+        }
+
     }
 
     @SuppressWarnings("unchecked")
@@ -163,50 +200,79 @@ public class DefaultNSQListenerContainer implements InitializingBean, NSQListene
     }
 
 
-    private void initNsqPushConsumer() {
+    private void initNsqCloudPushConsumer() {
 
         Assert.notNull(addrs, "Property 'addrs' is required");
-        Assert.notNull(nsqListener, "Property 'nsqListener' is required");
+        Assert.notNull(nsqCloudListener, "Property 'nsqListener' is required");
         Assert.notNull(topic, "Property 'topic' is required");
         Assert.notNull(channel, "Property 'channel' is required");
+        Assert.notNull(authSecret, "Property 'authSecret' is required");
 
-        NSQLookup lookup = new DefaultNSQLookup();
 
-        String[] addrs = getAddrs().split(",");
-        for (String addr : addrs) {
-            String[] hosts = addr.split(":");
-            lookup.addLookupAddress(hosts[0], Integer.valueOf(hosts[1]));
+        Client defaultClient = Client.getDefaultClient();
+        if (StringUtils.isNotBlank(authSecret)) {
+            defaultClient.setAuthSecret(authSecret);
         }
 
-        consumer = new NSQConsumer(lookup, topic, channel, message -> {
-            int currAttempts = message.getAttempts();
+        subscriber = new DirectSubscriber(2, addrs);
+
+        subscriber.subscribe(topic, channel, (MessageHandler) message -> {
+
+//            Base64 base64 = new Base64();
+//            String data = JSON.toJSONString(message.getData());
+//            System.out.println("====" + JSON.toJSONString(message.getData()));
+//            try {
+//                System.out.println("----" + new String(base64.decode(data), "UTF-8"));
+//            } catch (UnsupportedEncodingException e) {
+//                e.printStackTrace();
+//            }
+//            message.requeue();
+            long now = System.currentTimeMillis();
             try {
-                long now = System.currentTimeMillis();
                 log.debug("received msg: {}", message);
-                nsqListener.onMessage(doConvertMessage(message));
-                message.finished();
+                nsqCloudListener.onMessage(doConvertMessage(message));
+                message.finish();
                 long costTime = System.currentTimeMillis() - now;
                 log.debug("consume {} cost: {} ms", message.getAttempts(), costTime);
             } catch (Exception e) {
-                if (currAttempts >= attempts) {
-                    message.finished();
-                    log.error("topic:{} max {} attempts is error:", topic, attempts, e);
-                }
-                message.setAttempts(currAttempts + 1);
-                log.error("consume message failed. messageExt:", message, e);
                 message.requeue();
+                log.error("consume message failed. messageExt:", message, e);
             }
         });
 
     }
 
+    @SuppressWarnings("unchecked")
+    private Object doConvertMessage(byte[] msg) {
+        if (Objects.equals(messageType, NSQMessage.class)) {
+            return msg;
+        } else {
+            String str = new String(msg, Charset.forName(charset));
+            if (Objects.equals(messageType, String.class)) {
+                return str;
+            } else if (Objects.equals(messageType, List.class)) {
+                return JSONArray.parseArray(str);
+            } else {
+                // if msgType not string, use objectMapper change it.
+                try {
+                    return JSONObject.toJavaObject(JSON.parseObject(str), messageType);
+                } catch (Exception e) {
+                    log.info("convert failed. str:{}, msgType:{}", str, messageType);
+//                    nsqMessage.setAttempts(currAttempts + 1);
+                    throw new RuntimeException("cannot convert message to " + messageType, e);
+                }
+            }
+        }
+
+    }
+
     private Class getMessageType() {
-        Type[] interfaces = nsqListener.getClass().getGenericInterfaces();
+        Type[] interfaces = nsqCloudListener.getClass().getGenericInterfaces();
         if (Objects.nonNull(interfaces)) {
             for (Type type : interfaces) {
                 if (type instanceof ParameterizedType) {
                     ParameterizedType parameterizedType = (ParameterizedType) type;
-                    if (Objects.equals(parameterizedType.getRawType(), NSQListener.class)) {
+                    if (Objects.equals(parameterizedType.getRawType(), NSQCloudListener.class)) {
                         Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
                         if (Objects.isNull(actualTypeArguments) || actualTypeArguments.length == 0) {
                             return Object.class;

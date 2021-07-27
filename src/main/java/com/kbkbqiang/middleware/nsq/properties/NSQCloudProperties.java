@@ -1,4 +1,4 @@
-package io.github.kbkbqiang.middleware.nsq.properties;
+package com.kbkbqiang.middleware.nsq.properties;
 
 import lombok.Getter;
 import lombok.Setter;

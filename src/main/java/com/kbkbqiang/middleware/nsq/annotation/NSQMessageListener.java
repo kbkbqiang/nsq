@@ -1,4 +1,4 @@
-package io.github.kbkbqiang.middleware.nsq.annotation;
+package com.kbkbqiang.middleware.nsq.annotation;
 
 import java.lang.annotation.*;
 

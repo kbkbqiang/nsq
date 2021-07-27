@@ -10,7 +10,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.github.kbkbqiang</groupId>
+    <groupId>com.kbkbqiang</groupId>
     <artifactId>nsq</artifactId>
     <packaging>jar</packaging>
     <version>1.0.1.RELEASE</version>
