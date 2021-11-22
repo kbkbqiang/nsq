@@ -65,6 +65,7 @@ public class NSQConfiguration {
             return null;
         }
         String[] addrs = nsqProperties.getServerAddrs().split(",");
+
         NSQProducer producer = new NSQProducer();
         for (String addr : addrs) {
             String[] hosts = addr.split(":");
