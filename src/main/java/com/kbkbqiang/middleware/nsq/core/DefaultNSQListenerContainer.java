@@ -163,6 +163,9 @@ public class DefaultNSQListenerContainer implements InitializingBean, NSQListene
     }
 
 
+    /**
+     * 初始化消费者
+     */
     private void initNsqPushConsumer() {
 
         Assert.notNull(addrs, "Property 'addrs' is required");

@@ -18,7 +18,7 @@ public class NSQCloudProperties {
 
     private String lookupAddrs;
 
-    private int attempts = 5;
+    private int attempts = 10;
 
     private boolean isTls = false;
 
